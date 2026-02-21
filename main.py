@@ -99,9 +99,8 @@ async def main() -> None:
                 # before passing the event to game logic
                 if scaler.in_bounds(*event.pos):
                     translated_pos = scaler.to_game(*event.pos)
-                    # pygame events are immutable — rebuild with translated pos
-                    translated = event.copy()
-                    translated.pos = translated_pos
+                    # pygame-ce events are immutable — post a new event with translated pos
+                    translated = pygame.event.Event(event.type, {**event.__dict__, "pos": translated_pos})
                     game.handle_event(translated)
 
             elif event.type == pygame.KEYDOWN:
