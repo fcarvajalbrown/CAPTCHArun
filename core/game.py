@@ -134,8 +134,9 @@ class Game:
         self.state = GameState.FLASH
 
     def _start_levelup(self) -> None:
-        """Transition to LEVELUP state and start the display timer."""
+        """Transition to LEVELUP state, start display timer, play level-up sound."""
         self._levelup_timer = _LEVELUP_DURATION
+        self._play("level_up")
         self.state = GameState.LEVELUP
 
     # ── Per-frame update ──────────────────────────────────────────────────────

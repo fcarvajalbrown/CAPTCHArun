@@ -267,12 +267,24 @@ class Audio:
             _fade_out(_sweep(200, 800, 0.25, volume=0.30, wave="sine"))
         )
 
+        # level_up — C4 E4 G4 A4 C5 gentle sine arpeggio — ceremonial, softer than pass
+        # Uses sine (not square) for a warmer, more celebratory feel
+        self._sounds["level_up"] = _make_sound(
+            _fade_out(_concat(
+                _sine(261, 0.09, volume=0.20),
+                _sine(329, 0.09, volume=0.20),
+                _sine(392, 0.09, volume=0.20),
+                _sine(440, 0.09, volume=0.20),
+                _sine(523, 0.18, volume=0.22),
+            ))
+        )
+
     def play(self, name: str) -> None:
         """Play a sound by name. Silent no-op if unavailable or unknown.
 
         Args:
             name: One of: tile_select, tile_deselect, verify, pass, fail,
-                  timeout, checkbox_flee, menu_hover, menu_start.
+                  timeout, checkbox_flee, menu_hover, menu_start, level_up.
         """
         if not self._available:
             return
