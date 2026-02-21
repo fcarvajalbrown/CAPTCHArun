@@ -1,143 +1,182 @@
 """
 core/audio.py — Audio manager for CAPTCHArun.
 
-Generates all sounds programmatically using numpy + pygame.sndarray.
-No audio files required — all sounds are synthesized bit/chiptune style
-at runtime, fitting the corporate-glitch aesthetic of the game.
+Generates all sounds programmatically using pure Python math — no numpy,
+no audio files. Compatible with both CPython and pygbag WASM (itch.io).
 
-Sound design intent:
-    - tile_select:   short blip (square wave, high pitch) — tactile click feedback
-    - tile_deselect: same blip, slightly lower pitch — deselection feels lighter
-    - verify:        ascending two-tone blip — submission feels deliberate
-    - pass:          bright ascending arpeggio — rewarding, satisfying
-    - fail:          descending buzz — punishing but not annoying
-    - timeout:       flat alarm blip — distinct from fail, urgency
-    - checkbox_flee: quick whoosh-like pitch drop — comedic
-    - menu_hover:    very short soft tick — subtle affordance
-    - menu_start:    boot-up ascending sweep — game is beginning
+All sounds are in C major (C4=261Hz, E4=329Hz, G4=392Hz, A4=440Hz, C5=523Hz).
+Wave generation uses struct.pack to build raw PCM bytes that pygame.mixer.Sound
+accepts directly via the buffer protocol.
 
-All sounds are generated in _generate_sounds() which is called once on
-init(). If pygame.mixer is unavailable or numpy is missing, all methods
-become silent no-ops — the game runs fine without audio.
+Sound design:
+    tile_select   — A5 square blip (880Hz)        — tactile click
+    tile_deselect — E5 square blip (659Hz)         — lighter deselect
+    verify        — A4→E5 two-tone (440→659Hz)     — deliberate submission
+    pass          — C4 E4 G4 C5 arpeggio           — rewarding C major chord
+    fail          — E4→C4→A3 descent (329→261→220) — punishing but musical
+    timeout       — A4 double alarm (440Hz)         — urgent, distinct
+    checkbox_flee — 800→200Hz pitch drop sweep      — comedic
+    menu_hover    — C6 soft tick (1047Hz)           — subtle affordance
+    menu_start    — 200→800Hz sine sweep            — game is beginning
 
 Usage:
     audio = Audio()
     audio.init()
-
-    # anywhere in game.py or challenge handlers:
     audio.play("tile_select")
-    audio.play("pass")
 """
 
 from __future__ import annotations
+import math
+import struct
 import pygame
 
-# numpy is optional — audio degrades gracefully without it
-try:
-    import numpy as np
-    _NUMPY_AVAILABLE = True
-except ImportError:
-    _NUMPY_AVAILABLE = False
-
 # ── Synthesis constants ───────────────────────────────────────────────────────
-_SAMPLE_RATE = 22050   # Hz — low rate reinforces chiptune feel
-_CHANNELS    = 1       # mono
-_BIT_DEPTH   = 16      # signed 16-bit
+_SAMPLE_RATE = 22050
+_MAX_AMP     = 32767   # int16 max
 
 
-def _square_wave(freq: float, duration: float, volume: float = 0.3) -> "np.ndarray":
-    """Generate a square wave buffer.
+def _pack(samples: list[float]) -> bytes:
+    """Pack a list of float samples [-1.0, 1.0] into signed 16-bit stereo PCM bytes.
+
+    Duplicates mono into L+R channels so pygame stereo mixer accepts it.
+
+    Args:
+        samples: List of float values in [-1.0, 1.0].
+
+    Returns:
+        Raw PCM bytes: interleaved L R L R ... int16 stereo.
+    """
+    buf = []
+    for s in samples:
+        v = int(max(-1.0, min(1.0, s)) * _MAX_AMP)
+        buf.append(struct.pack("<hh", v, v))   # L + R
+    return b"".join(buf)
+
+
+def _square(freq: float, duration: float, volume: float = 0.3) -> list[float]:
+    """Generate a square wave as a list of float samples.
 
     Args:
         freq:     Frequency in Hz.
         duration: Duration in seconds.
-        volume:   Amplitude scale in [0.0, 1.0].
+        volume:   Amplitude in [0.0, 1.0].
 
     Returns:
-        int16 numpy array ready for pygame.sndarray.make_sound().
+        List of float samples.
     """
-    n_samples = int(_SAMPLE_RATE * duration)
-    t = np.linspace(0, duration, n_samples, endpoint=False)
-    wave = np.sign(np.sin(2 * np.pi * freq * t))
-    return (wave * volume * 32767).astype(np.int16)
+    n = int(_SAMPLE_RATE * duration)
+    period = _SAMPLE_RATE / freq
+    return [volume * (1.0 if (i % period) < (period / 2) else -1.0) for i in range(n)]
 
 
-def _sine_wave(freq: float, duration: float, volume: float = 0.3) -> "np.ndarray":
-    """Generate a sine wave buffer.
+def _sine(freq: float, duration: float, volume: float = 0.3) -> list[float]:
+    """Generate a sine wave as a list of float samples.
 
     Args:
         freq:     Frequency in Hz.
         duration: Duration in seconds.
-        volume:   Amplitude scale in [0.0, 1.0].
+        volume:   Amplitude in [0.0, 1.0].
 
     Returns:
-        int16 numpy array.
+        List of float samples.
     """
-    n_samples = int(_SAMPLE_RATE * duration)
-    t = np.linspace(0, duration, n_samples, endpoint=False)
-    wave = np.sin(2 * np.pi * freq * t)
-    return (wave * volume * 32767).astype(np.int16)
+    n = int(_SAMPLE_RATE * duration)
+    return [volume * math.sin(2 * math.pi * freq * i / _SAMPLE_RATE) for i in range(n)]
 
 
-def _sweep(freq_start: float, freq_end: float, duration: float,
-           volume: float = 0.3, wave: str = "square") -> "np.ndarray":
-    """Generate a frequency sweep (glide) buffer.
+def _sweep(f_start: float, f_end: float, duration: float,
+           volume: float = 0.3, wave: str = "square") -> list[float]:
+    """Generate a frequency sweep (glide) between two frequencies.
 
     Args:
-        freq_start: Starting frequency in Hz.
-        freq_end:   Ending frequency in Hz.
-        duration:   Duration in seconds.
-        volume:     Amplitude scale in [0.0, 1.0].
-        wave:       "square" or "sine".
+        f_start:  Starting frequency in Hz.
+        f_end:    Ending frequency in Hz.
+        duration: Duration in seconds.
+        volume:   Amplitude in [0.0, 1.0].
+        wave:     "square" or "sine".
 
     Returns:
-        int16 numpy array.
+        List of float samples.
     """
-    n_samples = int(_SAMPLE_RATE * duration)
-    t = np.linspace(0, duration, n_samples, endpoint=False)
-    freqs = np.linspace(freq_start, freq_end, n_samples)
-    phase = np.cumsum(2 * np.pi * freqs / _SAMPLE_RATE)
-    raw = np.sign(np.sin(phase)) if wave == "square" else np.sin(phase)
-    return (raw * volume * 32767).astype(np.int16)
+    n = int(_SAMPLE_RATE * duration)
+    samples = []
+    phase = 0.0
+    for i in range(n):
+        t = i / n
+        freq = f_start + (f_end - f_start) * t
+        phase += 2 * math.pi * freq / _SAMPLE_RATE
+        if wave == "square":
+            samples.append(volume * (1.0 if math.sin(phase) >= 0 else -1.0))
+        else:
+            samples.append(volume * math.sin(phase))
+    return samples
 
 
-def _concat(*buffers: "np.ndarray") -> "np.ndarray":
-    """Concatenate multiple wave buffers into one.
+def _concat(*parts: list[float]) -> list[float]:
+    """Concatenate multiple sample lists into one.
 
     Args:
-        *buffers: Any number of int16 arrays.
+        *parts: Any number of float sample lists.
 
     Returns:
-        Single concatenated int16 array.
+        Single concatenated list.
     """
-    return np.concatenate(buffers)
+    result = []
+    for p in parts:
+        result.extend(p)
+    return result
 
 
-def _fade_out(buf: "np.ndarray", tail: float = 0.05) -> "np.ndarray":
-    """Apply a linear fade-out to the last `tail` seconds of a buffer.
+def _fade_out(samples: list[float], tail: float = 0.05) -> list[float]:
+    """Apply a linear fade-out to the last `tail` seconds of a sample list.
 
     Prevents clicks and pops at the end of short sounds.
 
     Args:
-        buf:  int16 numpy array.
-        tail: Seconds of fade at the end.
+        samples: Float sample list.
+        tail:    Seconds of fade at the end.
 
     Returns:
-        Modified int16 array.
+        Modified sample list.
     """
-    fade_samples = min(int(_SAMPLE_RATE * tail), len(buf))
-    envelope = np.ones(len(buf))
-    envelope[-fade_samples:] = np.linspace(1.0, 0.0, fade_samples)
-    return (buf * envelope).astype(np.int16)
+    fade_n = min(int(_SAMPLE_RATE * tail), len(samples))
+    result = list(samples)
+    for i in range(fade_n):
+        idx = len(result) - fade_n + i
+        result[idx] *= i / fade_n
+    return result
+
+
+def _silence(duration: float) -> list[float]:
+    """Generate silence.
+
+    Args:
+        duration: Duration in seconds.
+
+    Returns:
+        List of zero-value float samples.
+    """
+    return [0.0] * int(_SAMPLE_RATE * duration)
+
+
+def _make_sound(samples: list[float]) -> pygame.mixer.Sound:
+    """Convert a float sample list to a pygame.mixer.Sound.
+
+    Args:
+        samples: Float sample list in [-1.0, 1.0].
+
+    Returns:
+        pygame.mixer.Sound ready to play.
+    """
+    return pygame.mixer.Sound(buffer=_pack(samples))
 
 
 # ── Audio manager ─────────────────────────────────────────────────────────────
 
 class Audio:
-    """Manages all game audio. Generates sounds on init, plays on demand.
+    """Manages all game audio. Pure Python synthesis, no numpy required.
 
-    All public methods are safe to call even if audio is unavailable —
-    they silently no-op if mixer init failed or numpy is missing.
+    Works identically in CPython and pygbag WASM. All sounds are in C major.
 
     Attributes:
         _sounds:    Dict mapping sound name → pygame.mixer.Sound.
@@ -150,17 +189,12 @@ class Audio:
         self._available: bool = False
 
     def init(self) -> None:
-        """Initialise pygame.mixer and generate all sounds.
+        """Initialise pygame.mixer and synthesize all sounds.
 
-        Safe to call multiple times — reinitialises cleanly.
-        If numpy is unavailable, _available stays False and all
-        play() calls become silent no-ops.
+        Safe to call multiple times. Silent no-op if mixer init fails.
         """
-        if not _NUMPY_AVAILABLE:
-            return
-
         try:
-            pygame.mixer.pre_init(_SAMPLE_RATE, -_BIT_DEPTH, 2, 512)
+            pygame.mixer.pre_init(_SAMPLE_RATE, -16, 2, 512)
             pygame.mixer.init()
             self._available = True
             self._generate_sounds()
@@ -168,85 +202,76 @@ class Audio:
             self._available = False
 
     def _generate_sounds(self) -> None:
-        """Synthesize all game sounds and store as pygame.mixer.Sound objects.
+        """Synthesize all sounds and cache as pygame.mixer.Sound objects.
 
-        Called once during init(). Each sound is a short programmatic
-        synthesis — square waves, sweeps, and arpeggios in chiptune style.
+        All frequencies chosen from C major scale for harmonic consistency.
         """
-        def make(buf: "np.ndarray") -> pygame.mixer.Sound:
-            """Wrap a numpy buffer as stereo pygame Sound.
-            
-            pygame.sndarray.make_sound requires shape (n, 2) for stereo mixer.
-            Duplicate mono channel into both L and R channels.
-            """
-            stereo = np.column_stack((buf, buf))
-            return pygame.sndarray.make_sound(stereo)
-
-        # tile_select — short high blip
-        self._sounds["tile_select"] = make(
-            _fade_out(_square_wave(880, 0.06, volume=0.25))
+        # tile_select — A5 square blip (880Hz) — sharp tactile click
+        self._sounds["tile_select"] = _make_sound(
+            _fade_out(_square(880, 0.06, volume=0.25))
         )
 
-        # tile_deselect — same blip, lower pitch
-        self._sounds["tile_deselect"] = make(
-            _fade_out(_square_wave(660, 0.06, volume=0.2))
+        # tile_deselect — E5 square blip (659Hz) — lighter than select
+        self._sounds["tile_deselect"] = _make_sound(
+            _fade_out(_square(659, 0.06, volume=0.20))
         )
 
-        # verify — two-tone ascending blip (deliberate submission feel)
-        self._sounds["verify"] = make(
+        # verify — A4→E5 two-tone (440→659Hz) — deliberate, musical
+        self._sounds["verify"] = _make_sound(
             _fade_out(_concat(
-                _square_wave(440, 0.07, volume=0.28),
-                _square_wave(660, 0.07, volume=0.28),
+                _square(440, 0.07, volume=0.28),
+                _square(659, 0.07, volume=0.28),
             ))
         )
 
-        # pass — bright ascending arpeggio (C4 E4 G4 C5)
-        self._sounds["pass"] = make(
+        # pass — C4 E4 G4 C5 ascending arpeggio — C major chord, rewarding
+        self._sounds["pass"] = _make_sound(
             _fade_out(_concat(
-                _square_wave(261, 0.07, volume=0.3),
-                _square_wave(329, 0.07, volume=0.3),
-                _square_wave(392, 0.07, volume=0.3),
-                _square_wave(523, 0.12, volume=0.35),
+                _square(261, 0.07, volume=0.30),
+                _square(329, 0.07, volume=0.30),
+                _square(392, 0.07, volume=0.30),
+                _square(523, 0.12, volume=0.35),
             ))
         )
 
-        # fail — descending buzz (E4 → C4 → low A3)
-        self._sounds["fail"] = make(
+        # fail — E4→C4→A3 descent — punishing but stays in C major
+        self._sounds["fail"] = _make_sound(
             _fade_out(_concat(
-                _square_wave(329, 0.08, volume=0.3),
-                _square_wave(261, 0.08, volume=0.3),
-                _square_wave(220, 0.14, volume=0.25),
+                _square(329, 0.08, volume=0.30),
+                _square(261, 0.08, volume=0.30),
+                _square(220, 0.14, volume=0.25),
             ))
         )
 
-        # timeout — flat alarm pulse (two repeated beeps)
-        alarm = _square_wave(440, 0.08, volume=0.3)
-        silence = np.zeros(int(_SAMPLE_RATE * 0.04), dtype=np.int16)
-        self._sounds["timeout"] = make(
-            _fade_out(_concat(alarm, silence, alarm))
+        # timeout — A4 double alarm — urgent, distinct from fail
+        self._sounds["timeout"] = _make_sound(
+            _fade_out(_concat(
+                _square(440, 0.08, volume=0.30),
+                _silence(0.04),
+                _square(440, 0.08, volume=0.30),
+            ))
         )
 
-        # checkbox_flee — comedic pitch drop sweep
-        self._sounds["checkbox_flee"] = make(
+        # checkbox_flee — 800→200Hz sweep — comedic pitch drop
+        self._sounds["checkbox_flee"] = _make_sound(
             _fade_out(_sweep(800, 200, 0.15, volume=0.25, wave="square"))
         )
 
-        # menu_hover — very soft tick
-        self._sounds["menu_hover"] = make(
-            _fade_out(_square_wave(1200, 0.03, volume=0.12))
+        # menu_hover — C6 soft tick (1047Hz) — subtle affordance
+        self._sounds["menu_hover"] = _make_sound(
+            _fade_out(_square(1047, 0.03, volume=0.12))
         )
 
-        # menu_start — ascending sweep into game
-        self._sounds["menu_start"] = make(
-            _fade_out(_sweep(200, 800, 0.25, volume=0.3, wave="sine"))
+        # menu_start — 200→800Hz sine sweep — ascending game start feel
+        self._sounds["menu_start"] = _make_sound(
+            _fade_out(_sweep(200, 800, 0.25, volume=0.30, wave="sine"))
         )
 
     def play(self, name: str) -> None:
-        """Play a sound by name. Silent no-op if unavailable or name unknown.
+        """Play a sound by name. Silent no-op if unavailable or unknown.
 
         Args:
-            name: Sound identifier string. One of:
-                  tile_select, tile_deselect, verify, pass, fail,
+            name: One of: tile_select, tile_deselect, verify, pass, fail,
                   timeout, checkbox_flee, menu_hover, menu_start.
         """
         if not self._available:
@@ -263,9 +288,8 @@ class Audio:
         """
         if not self._available:
             return
-        volume = max(0.0, min(1.0, volume))
         for sound in self._sounds.values():
-            sound.set_volume(volume)
+            sound.set_volume(max(0.0, min(1.0, volume)))
 
     def quit(self) -> None:
         """Shut down pygame.mixer cleanly on game exit."""
