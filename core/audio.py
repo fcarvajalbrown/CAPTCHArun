@@ -160,7 +160,7 @@ class Audio:
             return
 
         try:
-            pygame.mixer.pre_init(_SAMPLE_RATE, -_BIT_DEPTH, _CHANNELS, 512)
+            pygame.mixer.pre_init(_SAMPLE_RATE, -_BIT_DEPTH, 2, 512)
             pygame.mixer.init()
             self._available = True
             self._generate_sounds()
@@ -174,9 +174,13 @@ class Audio:
         synthesis — square waves, sweeps, and arpeggios in chiptune style.
         """
         def make(buf: "np.ndarray") -> pygame.mixer.Sound:
-            """Wrap a numpy buffer as a pygame Sound."""
-            # pygame.sndarray requires 2D for mono: shape (n, 1) or (n,)
-            return pygame.sndarray.make_sound(buf)
+            """Wrap a numpy buffer as stereo pygame Sound.
+            
+            pygame.sndarray.make_sound requires shape (n, 2) for stereo mixer.
+            Duplicate mono channel into both L and R channels.
+            """
+            stereo = np.column_stack((buf, buf))
+            return pygame.sndarray.make_sound(stereo)
 
         # tile_select — short high blip
         self._sounds["tile_select"] = make(
