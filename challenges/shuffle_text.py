@@ -91,7 +91,7 @@ def _render_distorted_text(
     # Draw each character
     for i, char in enumerate(word):
         meta = char_offsets[i]
-        font = pygame.font.SysFont(FONT_FAMILY, meta["size"], bold=True)
+        font = pygame.font.Font(None, int(meta["size"] * 1.35))
         char_surf = font.render(char, True, COLOR["text"])
 
         # Rotate
@@ -193,7 +193,7 @@ class ShuffleTextChallenge(CaptchaChallenge):
         )
 
         # Typed text inside input box
-        font = pygame.font.SysFont(FONT_FAMILY, 20, bold=True)
+        font = pygame.font.Font(None, 27)
         display_typed = self.typed + ("_" if len(self.typed) < len(self.word) else "")
         typed_surf = font.render(display_typed.upper(), True, COLOR["text"])
         tx = self.input_rect.x + 12
@@ -201,7 +201,7 @@ class ShuffleTextChallenge(CaptchaChallenge):
         surface.blit(typed_surf, (tx, ty))
 
         # Character count hint
-        hint_font = pygame.font.SysFont(FONT_FAMILY, 11)
+        hint_font = pygame.font.Font(None, 14)
         hint = hint_font.render(
             f"{len(self.typed)}/{len(self.word)} characters",
             True, COLOR["chrome"],

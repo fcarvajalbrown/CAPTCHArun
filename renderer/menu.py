@@ -155,7 +155,7 @@ def _draw_widget_frame(surface: pygame.Surface) -> None:
     pygame.draw.rect(surface, COLOR["chrome"], (wx, bar_y, ww, bar_h),
                      border_radius=6)  # rounded bottom only, close enough
 
-    f_sm = pygame.font.SysFont(FONT_FAMILY, FONT_SIZE_SM)
+    f_sm = pygame.font.Font(None, int(FONT_SIZE_SM * 1.35))
     brand = f_sm.render("reCAPTCHA", True, COLOR["tile"])
     privacy = f_sm.render("Privacy  -  Terms", True, (180, 180, 180))
     surface.blit(brand, (wx + ww - brand.get_width() - 10, bar_y + (bar_h - brand.get_height()) // 2))
@@ -208,9 +208,9 @@ def _draw_label_and_instructions(surface: pygame.Surface) -> None:
     Args:
         surface: Native game surface.
     """
-    f_lg = pygame.font.SysFont(FONT_FAMILY, FONT_SIZE_LG, bold=True)
-    f_md = pygame.font.SysFont(FONT_FAMILY, FONT_SIZE_MD)
-    f_sm = pygame.font.SysFont(FONT_FAMILY, FONT_SIZE_SM)
+    f_lg = pygame.font.Font(None, int(int(FONT_SIZE_LG * 1.35 * 1.35)))
+    f_md = pygame.font.Font(None, int(FONT_SIZE_MD * 1.35))
+    f_sm = pygame.font.Font(None, int(FONT_SIZE_SM * 1.35))
 
     label = f_lg.render("I am not a robot.", True, COLOR["text"])
     cx = SCREEN_W // 2
@@ -228,8 +228,8 @@ def _draw_title(surface: pygame.Surface) -> None:
     Args:
         surface: Native game surface.
     """
-    f_title = pygame.font.SysFont(FONT_FAMILY, 28, bold=True)
-    f_tag   = pygame.font.SysFont(FONT_FAMILY, FONT_SIZE_SM)
+    f_title = pygame.font.Font(None, int(int(28 * 1.35 * 1.35)))
+    f_tag   = pygame.font.Font(None, int(FONT_SIZE_SM * 1.35))
 
     cx = SCREEN_W // 2
 
@@ -254,7 +254,7 @@ def _draw_hint(surface: pygame.Surface) -> None:
         return
 
     alpha = min(255, int((_time - 1.0) * 300))
-    f = pygame.font.SysFont(FONT_FAMILY, FONT_SIZE_SM)
+    f = pygame.font.Font(None, int(FONT_SIZE_SM * 1.35))
     hint = f.render("click the checkbox to begin", True, COLOR["chrome"])
 
     surf = pygame.Surface((hint.get_width(), hint.get_height()), pygame.SRCALPHA)

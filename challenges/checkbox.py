@@ -142,7 +142,7 @@ class CheckboxChallenge(CaptchaChallenge):
         # Dodge counter hint
         remaining = max(0, MAX_DODGES - self.dodges)
         if remaining > 0 and not self.checked:
-            font = pygame.font.SysFont("couriernew", 11)
+            font = pygame.font.Font(None, 14)
             hint = font.render(f"escapes left: {remaining}", True, COLOR["chrome"])
             surface.blit(hint, (rect.x + rect.w // 2 - hint.get_width() // 2,
                                 rect.y + rect.h + 8))

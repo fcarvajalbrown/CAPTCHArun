@@ -39,11 +39,11 @@ from core.game import Game, GameState
 from core.audio import Audio
 
 # ── Window configuration ──────────────────────────────────────────────────────
-# Desktop window starts at 2x native for comfortable play.
-# pygbag will override this with the canvas size.
-_WINDOW_SCALE  = 2
-_WINDOW_W      = SCREEN_W * _WINDOW_SCALE
-_WINDOW_H      = SCREEN_H * _WINDOW_SCALE
+import sys
+_IS_WASM      = sys.platform == "emscripten"
+_WINDOW_SCALE = 1 if _IS_WASM else 2
+_WINDOW_W     = SCREEN_W * _WINDOW_SCALE
+_WINDOW_H     = SCREEN_H * _WINDOW_SCALE
 
 
 async def main() -> None:

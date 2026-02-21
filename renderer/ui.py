@@ -45,7 +45,7 @@ def _font(size: int) -> pygame.font.Font:
         A pygame.font.Font instance.
     """
     if size not in _fonts:
-        _fonts[size] = pygame.font.SysFont(FONT_FAMILY, size)
+        _fonts[size] = pygame.font.Font(None, int(size * 1.35))
     return _fonts[size]
 
 
@@ -294,7 +294,7 @@ def draw_level_up(surface: pygame.Surface, security_level: int, alpha: float) ->
     surface.blit(label, (cx - label.get_width() // 2, 220))
 
     # "LEVEL X" — big, bold, highlighted
-    f_level = pygame.font.SysFont(FONT_FAMILY, 42, bold=True)
+    f_level = pygame.font.Font(None, 57)
     level_text = f_level.render(f"LEVEL  {security_level}", True, COLOR["highlight"])
     surface.blit(level_text, (cx - level_text.get_width() // 2, 245))
 

@@ -85,7 +85,7 @@ def _draw_decoy_sign(surface: pygame.Surface, rect: pygame.Rect) -> None:
     pygame.draw.polygon(surface, (40, 40, 40), diamond, 2)
 
     # Exclamation mark
-    font = pygame.font.SysFont("couriernew", 22, bold=True)
+    font = pygame.font.Font(None, 29)
     mark = font.render("!", True, (40, 40, 40))
     surface.blit(mark, (cx - mark.get_width() // 2, cy - mark.get_height() // 2))
 
