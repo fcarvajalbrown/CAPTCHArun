@@ -248,3 +248,66 @@ def draw_game_over(surface: pygame.Surface, score: int, round_num: int) -> pygam
                          btn_y + (btn_h - label.get_height()) // 2))
 
     return pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+
+
+# ── Level up screen ───────────────────────────────────────────────────────────
+
+def draw_level_up(surface: pygame.Surface, security_level: int, alpha: float) -> None:
+    """Draw the security level-up congratulations screen.
+
+    Full-screen overlay that auto-dismisses — no button needed. Fades in
+    then out, driven by alpha from game.py's level-up timer.
+
+    Visual: dark overlay, large "SECURITY LEVEL X" in cuboid style,
+    congratulations subtext, animated cuboid grid decorations.
+
+    Args:
+        surface:        Native 360x640 game surface.
+        security_level: The new security level just reached.
+        alpha:          Fade factor in [0.0, 1.0]. game.py drives this
+                        from 0→1→0 over the display duration.
+    """
+    if alpha <= 0.0:
+        return
+
+    cx = SCREEN_W // 2
+
+    # Dark overlay — deepens with alpha
+    overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+    overlay.fill((20, 20, 20, int(alpha * 220)))
+    surface.blit(overlay, (0, 0))
+
+    # Decorative cuboid row — three small cuboids above the text
+    from renderer.cuboid import draw_cuboid
+    cub_size = 20
+    cub_gap  = 12
+    total_cub_w = 3 * cub_size + 2 * cub_gap
+    cub_y = 180
+    cub_x = cx - total_cub_w // 2
+    for i in range(3):
+        draw_cuboid(surface, cub_x + i * (cub_size + cub_gap), cub_y,
+                    cub_size, cub_size, COLOR["highlight"])
+
+    # "SECURITY CLEARANCE" label
+    f_sm = _font(FONT_SIZE_SM)
+    label = f_sm.render("SECURITY CLEARANCE", True, COLOR["chrome"])
+    surface.blit(label, (cx - label.get_width() // 2, 220))
+
+    # "LEVEL X" — big, bold, highlighted
+    f_level = pygame.font.SysFont(FONT_FAMILY, 42, bold=True)
+    level_text = f_level.render(f"LEVEL  {security_level}", True, COLOR["highlight"])
+    surface.blit(level_text, (cx - level_text.get_width() // 2, 245))
+
+    # Underline
+    ul_y = 245 + level_text.get_height() + 4
+    pygame.draw.rect(surface, COLOR["highlight"], (cx - 80, ul_y, 160, 3))
+
+    # Congrats subtext
+    f_md = _font(FONT_SIZE_MD)
+    congrats = f_md.render("You are cleared for deeper verification.", True, COLOR["tile"])
+    surface.blit(congrats, (cx - congrats.get_width() // 2, ul_y + 20))
+
+    # "Are you still human?" — the game's running joke
+    f_sm2 = _font(FONT_SIZE_SM)
+    joke = f_sm2.render("...are you sure you're not a robot?", True, COLOR["chrome"])
+    surface.blit(joke, (cx - joke.get_width() // 2, ul_y + 48))
