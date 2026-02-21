@@ -36,6 +36,7 @@ import pygame
 from settings import SCREEN_W, SCREEN_H, FPS, TITLE, COLOR
 from utils.scaler import Scaler
 from core.game import Game, GameState
+from core.audio import Audio
 
 # ── Window configuration ──────────────────────────────────────────────────────
 # Desktop window starts at 2x native for comfortable play.
@@ -72,9 +73,10 @@ async def main() -> None:
     game  = Game()
     game.start_menu()
 
-    # TODO: audio init and hookup
-    # audio = Audio()
-    # audio.init()
+    # Audio — synthesized chiptune sounds in C major
+    audio = Audio()
+    audio.init()
+    game.set_audio(audio)
 
     # ── Main loop ─────────────────────────────────────────────────────────────
     running = True
@@ -120,7 +122,7 @@ async def main() -> None:
         await asyncio.sleep(0)
 
     # ── Cleanup ───────────────────────────────────────────────────────────────
-    # audio.quit()
+    audio.quit()
     pygame.quit()
 
 
